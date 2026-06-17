@@ -124,8 +124,6 @@ llm-wiki-skill/
 │       ├── cascade_flag.py      ← Auto-insert FIX comments on citations to modified sources
 │       ├── fix_links.py         ← Repair wrong-category / wrong-slug / missing wikilinks
 │       └── audit_review.py      ← Scan audit/ files + inline <!-- FIX --> comments
-│       # (scripts/ also contains update_vault.py and graph_optimizer.py — experimental
-│       #  helpers not part of the eight documented operations)
 ├── audit-shared/                ← Shared TypeScript library
 │   └── src/{schema,anchor,id,serialize,index}.ts
 ├── plugins/obsidian-audit/      ← Obsidian plugin — file audit from the vault
