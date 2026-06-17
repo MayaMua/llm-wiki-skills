@@ -331,6 +331,24 @@ Steps 2–5, then rebuild the index once all stubs are complete.
 > ingest) — **off by default**. Use it only if this vault's `CLAUDE.md` calls for a
 > preprocessing step.
 
+**After batch ingest — compile immediately (MANDATORY).** When you process 3+
+sources in one batch, each source will independently extract concepts. This
+produces shallow one-line stubs with no cross-source synthesis. Before creating
+individual concept pages:
+1. Read ALL source stubs first. Identify concepts that appear in 2+ sources —
+   these are the highest-value targets.
+2. Merge related low-overlap concepts into broader umbrella pages (e.g.,
+   `short-squeeze` + `options-volatility` → `options-market-mechanics`).
+3. Flesh out the merged pages with cross-source synthesis, Evolution Log,
+   and line citations from every contributing source.
+4. Only then create standalone pages for genuinely unique concepts.
+5. Delete absorbed stubs; update source page wikilinks to point to new merged
+   concepts; rebuild index.
+
+Rule of thumb: a batch of N related sources should produce roughly N–2N fleshed-out
+concept pages, not 5N one-line stubs. A concept page without an Evolution Log or
+cross-source synthesis is an ingest TODO, not a finished page.
+
 Log: `## [HH:MM] batch_ingest | N files processed, M already ingested`
 
 ### 4. `query`
