@@ -93,19 +93,12 @@ qmd status
 
 ### Opting into qmd
 
-qmd is off by default. Every scaffolded vault has a `## Search` block in `CLAUDE.md`:
+qmd is off by default. To turn it on, note it in `CLAUDE.md` (e.g. under § Notes for
+the LLM) so the agent uses the qmd paths instead of index scanning:
 
 ```
-## Search
-- search_tool: none
-- qmd_collection:
+search_tool: qmd            # collection: <collection-name>
 ```
-
-To turn it on: install qmd, register a collection (`qmd collection add wiki/ --name <name>`),
-then set the two lines — `search_tool: qmd` and `qmd_collection: <name>` — and run `qmd embed`.
-(Or scaffold with `--search qmd`, which pre-fills the block with a collection name derived from
-the title.) The agent reads `## Search` at session start and switches from index scanning to the
-qmd paths.
 
 **If qmd is unavailable**, all operations fall back to index scanning
 (`wiki/index.md` → domain indexes). Operations remain correct but slower.

@@ -27,6 +27,17 @@ The transformer processes all tokens simultaneously via self-attention.
 - WRONG: "approximately 175 billion parameters"
 - RIGHT: "175 billion parameters" (raw/articles/gpt3.md, L8)
 
+**Cite the raw file, never the source page.** A citation traces to the immutable
+`raw/` evidence so a reader can verify it. A `[[sources/...]]` wikilink points to a
+*compiled summary*, which is not evidence — using it as a citation breaks
+verify-fresh and clutters the graph with the same link repeated per claim.
+- WRONG: `NVDA holds an AA credit rating. ([[sources/nvda-bonds]], L10)`
+- RIGHT: `NVDA holds an AA credit rating. (raw/clippings/nvda-bonds.md, L10)`
+
+The source-page wikilink appears **once**, in the page's `## Sources` section, for
+navigation — not inline as a citation. (lint check 14 flags inline
+`([[sources/...]], Lxx)` citations.)
+
 ---
 
 ## Confidence Gating
@@ -73,45 +84,79 @@ If a concept page **would** exceed ~1200 words:
 
 ## Concept Extraction Workflow
 
-When ingesting a source:
+When ingesting a source (the **same workflow applies to entities** — substitute
+`wiki/entities/` and `entity_type`):
 
-1. **Identify concepts** — key ideas, frameworks, techniques
-2. **Generate slug** — lowercase English, hyphens: `attention-mechanism`
-3. **Alignment check** (mandatory):
-   - Search `wiki/concepts/` for the slug file
-   - Scan ALL existing concept pages' `aliases` fields
-   - If match found (slug OR alias): **UPDATE** existing page
-   - If no match: **CREATE** new page from template
-4. **For each concept (create or update):**
-   - Add source to Sources section
-   - Append to Evolution Log
-   - Update `source_count`, `last_reviewed`, `updated`
-   - Apply secondary language annotation if configured
-   - Apply line citations to every claim
+1. **Identify concepts/entities** — key ideas, frameworks, techniques, people, tools,
+   orgs. Record each in **both languages** when the source gives them (e.g. 注意力机制 /
+   Attention Mechanism).
+2. **Generate slug** — always lowercase **English**, hyphens: `attention-mechanism`.
+   Map a Chinese-only name to its English slug (`第一性原理` → `first-principles-thinking`)
+   so the file name is stable regardless of which language the source used.
+3. **Alignment check — bilingual, mandatory** (do this BEFORE creating any page):
+   - Search `wiki/concepts/` (or `wiki/entities/`) for the slug file.
+   - Scan **every existing page's `aliases` field** for a match in **either language** —
+     the same idea may already live under a Chinese alias, an English alias, or a
+     synonym. Match Chinese↔Chinese, English↔English, AND Chinese↔English.
+   - If matched (by slug OR any alias): **UPDATE** the existing page — never create a
+     near-duplicate. (lint check 8 catches near-duplicate slugs; aliases catch the rest.)
+   - If no match anywhere: **CREATE** a new page from the template, and in `aliases` put
+     **both the Chinese and the English name** (plus common synonyms) so the next ingest
+     in either language finds it.
+4. **For each concept/entity (create or update):**
+   - Set `title:` to the **primary-language name** — whichever language `CLAUDE.md`
+     § Bilingual format names as primary (see § Bilingual Naming below). The first line /
+     `# H1` leads with the primary language and annotates the secondary in `（）`
+     (Chinese-primary vault: `中文名（English Name）`).
+   - Add the source to the `## Sources` section (once).
+   - Append to the Evolution Log (concepts) with the 强化/修正/新增分歧 categorization below.
+   - Update `source_count`, `last_reviewed`, `updated`.
+   - Keep `aliases` complete and bilingual.
+   - Apply line citations to every factual claim.
 
 ### Evolution Log Protocol
 
-Never silently overwrite definitions. Log every change:
+Never silently overwrite definitions. Log every change, choosing the category by how
+the new source relates to the current Definition:
+
+- consistent → **强化 / Reinforced**
+- changes the definition → **修正 / Corrected: [what changed]**
+- contradicts → **新增分歧 / New conflict: [the disagreement] — see Contradictions**
+
+Format: `- YYYY-MM-DD (N sources): <category> — <one-line description>`
 
 ```
 ## Evolution Log
 
 - 2025-01-10 (1 source): Created from [[sources/paper-a]].
-- 2025-02-05 (2 sources): Reinforced. [[sources/paper-b]] consistent.
-- 2025-03-12 (3 sources): Corrected: added distinction between X and Y.
-- 2025-04-01 (4 sources): New conflict: [[sources/paper-d]] contradicts claim Z.
+- 2025-02-05 (2 sources): 强化 / Reinforced — [[sources/paper-b]] consistent.
+- 2025-03-12 (3 sources): 修正 / Corrected — added distinction between X and Y.
+- 2025-04-01 (4 sources): 新增分歧 / New conflict — [[sources/paper-d]] contradicts claim Z (see Contradictions).
 ```
 
 ---
 
-## Secondary Language Annotation
+## Bilingual Naming & Term Annotation
 
-When a secondary language is set in `CLAUDE.md` (§ Notes for the LLM):
+`CLAUDE.md` (§ Notes for the LLM) sets the language order. When it is bilingual,
+**the first-named language is primary and leads; the second is annotated in
+parentheses.** For a `Chinese (primary) + English (secondary)` vault:
 
-- Annotate each NEW term on FIRST appearance per article: `Term（译名）`
-- Subsequent appearances in SAME article: Term only. No repeat.
-- Across DIFFERENT articles: re-annotate on first occurrence.
-- Uncertain translation: `Term（tentative: 候选）` — flag in lint.
+- **Titles, headings, and a term's first appearance:** `中文名（English Name）` —
+  Chinese leads.
+  - RIGHT: `经济（Economy）` · `注意力机制（Attention Mechanism）` · `美联储沟通政策（Fed Communication Policy）`
+  - WRONG: `Economy（经济）` (English-primary) · bare `Economy` · bare `经济`
+- **`title:` frontmatter (concept/entity)** = the **primary-language name** (Chinese, in
+  this example) — it is the graph-node label. If an entity has no natural Chinese name (a ticker like `NVDA`),
+  lead with the common Chinese name where one exists (`英伟达（NVDA）`); otherwise keep
+  the proper name and still record any Chinese alias.
+- **`aliases:` frontmatter** holds **all** names, Chinese AND English, so the alignment
+  check (below) and search match either language.
+- Subsequent appearances of the term in the SAME page: primary (Chinese) only, no repeat.
+- Across DIFFERENT pages: re-annotate on first occurrence.
+- Uncertain translation: `中文名（tentative: English）` — flag in lint.
+- **Slugs/filenames and wikilinks always stay English** lowercase-hyphen
+  (`[[concepts/fed-communication-policy]]`), never Chinese — independent of the prose language.
 
 ---
 
@@ -149,6 +194,10 @@ $$
 3. **Check existing pages** before creating new link targets
 4. **For folder-split pages**, link index: `[[concepts/foo/index|Foo]]`
 5. **Always use English lowercase-hyphen slugs**: `[[concepts/attention-mechanism]]`
+6. **List each target once in list sections.** In `## Concepts Extracted`,
+   `## Entities Extracted`, and `## Sources`, every wikilink appears **exactly
+   once** — one bullet per unique target, even if the source mentions it many
+   times. Never emit a bullet per mention. (lint check 15 flags duplicates.)
 
 **Forbidden targets:**
 - System files: `[[log]]` `[[index]]` `[[overview]]` `[[QUESTIONS]]`

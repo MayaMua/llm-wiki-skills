@@ -50,9 +50,13 @@ This wiki follows the llm-wiki skill's eight operations:
 - **Entity pages** (`wiki/entities/`): kebab-case slug
 - **Synthesis pages** (`wiki/synthesis/`): kebab-case slug
 
-### Wikilinks
-- Always `[[category/english-lowercase-slug]]`
-- Chinese/other names go in `aliases` field only
+### Wikilinks & bilingual naming
+- Wikilinks/slugs: always `[[category/english-lowercase-slug]]` — never the non-English name
+- Bilingual vault: `title:` = the **primary-language** name; the page's first line / `# H1`
+  leads with the primary language and annotates the secondary in `（）`. The scaffold writes
+  a `### Bilingual format` block here naming which language leads, with an example
+  (Chinese-primary → `经济（Economy）`; English-primary → `Economy（经济）`)
+- `aliases`: **all** names, every language — so alignment/search match either
 
 ### Diagrams and formulas
 - All diagrams are **mermaid**. No ASCII art.
@@ -72,7 +76,9 @@ Domain catalogs live in wiki/index/<domain>.md.
 *(none)*
 
 ## Notes for the LLM
-- Language: <en | zh | bilingual>
+- Language: <English | Chinese | "<Primary> (primary) + <Secondary> (secondary)">
+                                     # for bilingual, name the PRIMARY first; scaffold also
+                                     # writes a "### Bilingual format" block under Naming conventions
 - Tone: neutral
 ```
 
@@ -202,7 +208,7 @@ processed: true
 ```yaml
 ---
 type: concept
-title: ""
+title: ""                    # primary-language name per CLAUDE.md (Chinese-primary vault: "注意力机制（Attention Mechanism）")
 date: YYYY-MM-DD
 updated: YYYY-MM-DD
 tags: [wiki, wiki/concept]
@@ -210,7 +216,7 @@ source_count: 0
 confidence: low
 domain_volatility: medium
 last_reviewed: YYYY-MM-DD
-aliases: []
+aliases: []                  # ALL names — Chinese AND English (+ synonyms)
 ---
 ```
 
@@ -219,11 +225,11 @@ aliases: []
 ```yaml
 ---
 type: entity
-title: ""
+title: ""                    # primary-language name per CLAUDE.md (Chinese-primary vault: "英伟达（NVDA）")
 date: YYYY-MM-DD
 tags: [wiki, wiki/entity]
 entity_type: person          # person | tool | paper | organization
-aliases: []
+aliases: []                  # ALL names — Chinese AND English (+ ticker/synonyms)
 ---
 ```
 

@@ -25,6 +25,8 @@ Checks:
  11. audit/ shape         — YAML frontmatter validation
  12. Audit targets        — every open audit's target file exists
  13. Claims verification  — verbatim strings in claims_requiring_verification exist in raw source
+ 14. Citation format      — inline ([[sources/...]], Lxx) citations that should point to raw/
+ 15. Duplicate list links — a wikilink repeated in a Concepts/Entities Extracted or Sources section
 
 Exit codes:
   0 — no issues found
@@ -48,6 +50,12 @@ LOG_FILENAME_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})\.md$")
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 CITATION_RE = re.compile(r"\(raw/[^)]+,\s*(L\d|p\.\d)|location unknown\)|\[synthesis\]")
 FACTUAL_LINE_RE = re.compile(r"^[-•]\s.{50,}$|^\d+\.\s.{50,}$")
+# A source-page wikilink used as an inline citation, e.g. "([[sources/foo]], L10)".
+# Citations must point to raw/ evidence, not a compiled summary page (see check 14).
+SRC_WIKILINK_CITATION_RE = re.compile(r"\(\s*\[\[sources/[^\]]+\]\]\s*,\s*(?:L\d|p\.\d)")
+# Section headers (lowercased, no leading #) whose bullet wikilinks must be unique.
+DEDUP_LIST_SECTIONS = {"concepts extracted", "entities extracted", "sources"}
+LIST_LINK_RE = re.compile(r"^[-*]\s*\[\[([^\]|#]+)")
 # Format: "verbatim text" (raw/path/file.md, L42)
 CLAIM_ENTRY_RE = re.compile(r'^"([^"]+)"\s*\(([^,)]+),\s*(L\d+[^)]*|p\.\d+[^)]*)\)')
 
@@ -219,14 +227,22 @@ def check_index(wiki_dir: Path, root: Path) -> None:
     if not idx.exists():
         log_issue("ERROR", "index", "wiki/index.md missing")
         return
+    # The master index.md is lightweight (top-N per domain); the full per-domain
+    # catalogs live in wiki/index/<domain>.md. A page is "indexed" if it appears in
+    # either, so concatenate them before checking — otherwise every page beyond a
+    # domain's top-N is a false positive.
     index_text = idx.read_text(encoding="utf-8", errors="replace")
+    index_dir = wiki_dir / "index"
+    if index_dir.is_dir():
+        for catalog in index_dir.glob("*.md"):
+            index_text += "\n" + catalog.read_text(encoding="utf-8", errors="replace")
     for f in wiki_files(wiki_dir):
         rel = str(f.relative_to(wiki_dir).with_suffix(""))
         if (f"[[{f.stem}]]" not in index_text
                 and rel not in index_text
                 and f.stem not in index_text):
             log_issue("WARNING", "index",
-                      f"{f.relative_to(root)} — not listed in index.md")
+                      f"{f.relative_to(root)} — not listed in index.md or wiki/index/<domain>.md")
 
 
 # ── Check 4: Stub Pages ──────────────────────────────────────────────────────
@@ -332,10 +348,19 @@ def check_uncited(wiki_dir: Path, root: Path) -> None:
             continue
         for f in target_dir.rglob("*.md"):
             _, body = parse_frontmatter(f)
+            # The Evolution Log is a change-log of bookkeeping entries
+            # ("- 2026-06-17 (2 sources): ..."), not factual claims — skip it so
+            # those bullets aren't flagged as uncited.
+            skip_section = False
             for line in body.splitlines():
-                line = line.strip()
-                if FACTUAL_LINE_RE.match(line) and not CITATION_RE.search(line):
-                    preview = (line[:60] + "...") if len(line) > 60 else line
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    skip_section = stripped.lstrip("#").strip().lower() == "evolution log"
+                    continue
+                if skip_section:
+                    continue
+                if FACTUAL_LINE_RE.match(stripped) and not CITATION_RE.search(stripped):
+                    preview = (stripped[:60] + "...") if len(stripped) > 60 else stripped
                     log_issue("WARNING", "uncited",
                               f'{f.relative_to(root)} — possible uncited: "{preview}"')
 
@@ -434,7 +459,13 @@ def parse_frontmatter_list(path: Path, key: str) -> list[str]:
             continue
         if in_list:
             if stripped.startswith("- "):
-                items.append(stripped[2:].strip().strip("\"'"))
+                # Unwrap only ONE outer matching quote layer (the YAML scalar quote),
+                # preserving any inner quotes — claims_requiring_verification entries are
+                # '"verbatim" (raw/path, Lxx)', whose inner double-quote check 13 needs.
+                item = stripped[2:].strip()
+                if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'":
+                    item = item[1:-1]
+                items.append(item)
             elif stripped and not stripped.startswith("#"):
                 in_list = False
     return items
@@ -482,6 +513,56 @@ def check_claims_verification(wiki_dir: Path, root: Path) -> None:
                 log_issue("ERROR", "claims-verification",
                           f"{f.relative_to(root)} — verbatim claim NOT FOUND in {raw_rel}: "
                           f"\"{verbatim}\"")
+
+
+# ── Check 14: Source-Page Wikilink Citations ─────────────────────────────────
+
+def check_wikilink_citations(wiki_dir: Path, root: Path) -> None:
+    """Flag inline citations that point to a [[sources/...]] page instead of the
+    raw file, e.g. "(... claim. ([[sources/foo]], L10))". Citations must trace to
+    raw/ evidence; the source-page wikilink belongs only in the Sources section."""
+    for subdir in ("concepts", "sources", "entities", "comparisons", "synthesis"):
+        target_dir = wiki_dir / subdir
+        if not target_dir.exists():
+            continue
+        for f in target_dir.rglob("*.md"):
+            _, body = parse_frontmatter(f)
+            for line in body.splitlines():
+                if SRC_WIKILINK_CITATION_RE.search(line):
+                    preview = line.strip()
+                    preview = (preview[:60] + "...") if len(preview) > 60 else preview
+                    log_issue("WARNING", "citation-format",
+                              f'{f.relative_to(root)} — cite raw file, not source page: '
+                              f'"{preview}"')
+
+
+# ── Check 15: Duplicate List Entries ─────────────────────────────────────────
+
+def check_duplicate_list_entries(wiki_dir: Path, root: Path) -> None:
+    """Flag a wikilink listed more than once in a Concepts/Entities Extracted or
+    Sources section — each target should appear exactly once."""
+    for f in wiki_files(wiki_dir):
+        _, body = parse_frontmatter(f)
+        section = None
+        seen: set[str] = set()
+        for line in body.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                name = stripped.lstrip("#").strip().lower()
+                section = name if name in DEDUP_LIST_SECTIONS else None
+                seen = set()
+                continue
+            if section is None:
+                continue
+            m = LIST_LINK_RE.match(stripped)
+            if m:
+                target = m.group(1).strip()
+                if target in seen:
+                    log_issue("WARNING", "duplicate-link",
+                              f"{f.relative_to(root)} — '{section}' lists "
+                              f"[[{target}]] more than once")
+                else:
+                    seen.add(target)
 
 
 # ── Stale-Only Mode ───────────────────────────────────────────────────────────
@@ -558,8 +639,10 @@ def lint(root: str, structural: bool = False) -> int:
     audit_targets = check_audit_shape(root_path)
     check_audit_targets(audit_targets, root_path)
     check_claims_verification(wiki_path, root_path)
+    check_wikilink_citations(wiki_path, root_path)
+    check_duplicate_list_entries(wiki_path, root_path)
 
-    checks_run = "8 (structural)" if structural else "13+ (full)"
+    checks_run = "10 (structural)" if structural else "15+ (full)"
     report_path = outputs_path / f"lint-{TODAY_ISO}.md"
 
     lines = [

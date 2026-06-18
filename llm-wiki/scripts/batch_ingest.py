@@ -19,8 +19,6 @@ Example:
     python3 batch_ingest.py ~/wikis/ai-research --dir raw/pdfs --ext .pdf --pdf
 """
 
-from __future__ import annotations  # PEP 604 `X | None` in signatures → lazy, works on py3.9
-
 import hashlib
 import os
 import subprocess

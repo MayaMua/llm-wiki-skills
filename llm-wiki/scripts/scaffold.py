@@ -4,11 +4,12 @@ scaffold.py — Bootstrap a new LLM Wiki directory structure.
 
 Usage:
     python3 scaffold.py <wiki-root> "<Topic Title>"
-    python3 scaffold.py <wiki-root> "<Topic>" --domains "AI,Finance" --primary-lang zh --lang en
+    python3 scaffold.py <wiki-root> "<Topic>" --domains "AI,Finance" --primary-lang zh --lang en --private-zones ""
     python3 scaffold.py <wiki-root>                # interactive mode
 
 Example:
-    python3 scaffold.py ~/wikis/ai-research "AI Research" --domains "AI/ML,Technology" --primary-lang zh --lang en
+    python3 scaffold.py ~/wikis/ai-research "AI Research" --domains "AI/ML,Technology" \
+        --primary-lang zh --lang en --private-zones "private_zone"
 
 Creates the full wiki directory tree including CLAUDE.md (the single config +
 schema file), wiki/index.md, all templates, log/, audit/, and the first log entry.
@@ -20,9 +21,80 @@ import argparse
 from datetime import date, datetime
 
 
+_LANG_NAMES = {
+    "zh": "Chinese", "zh-cn": "Chinese", "zh-hans": "Chinese", "chinese": "Chinese",
+    "en": "English", "english": "English",
+    "ja": "Japanese", "japanese": "Japanese",
+    "ko": "Korean", "korean": "Korean",
+    "fr": "French", "de": "German", "es": "Spanish",
+}
+
+
+def _lang_display(code: str) -> str:
+    """Map a language code/name to a display name (zh → Chinese). Unknown → Title-cased."""
+    c = (code or "").strip()
+    if not c:
+        return ""
+    return _LANG_NAMES.get(c.lower(), c[:1].upper() + c[1:])
+
+
+def _bilingual_example(primary_display: str, secondary_display: str) -> str:
+    """A worked title example showing primary（secondary） for the chosen pair."""
+    if primary_display == "Chinese":
+        return "经济（Economy）"
+    if secondary_display == "Chinese":
+        return "Economy（经济）"
+    return f"<{primary_display} name>（<{secondary_display} name>）"
+
+
+def _bilingual_block(primary_display: str, secondary_display: str) -> str:
+    """Markdown for CLAUDE.md § Naming conventions recording THIS vault's bilingual order.
+    The skill stays language-agnostic; the primary/secondary decision is captured here,
+    in the per-vault config, from the scaffold interview answers."""
+    example = _bilingual_example(primary_display, secondary_display)
+    return (
+        f"\n### Bilingual format ({primary_display} primary)\n"
+        f"- Titles, headings, and a term's first appearance **lead with {primary_display}** and "
+        f"annotate {secondary_display} in parens — e.g. `{example}`.\n"
+        f"- `title:` frontmatter = the {primary_display} primary name (the graph-node label); "
+        f"`aliases` holds **all** names, in both {primary_display} and {secondary_display}.\n"
+        f"- Slugs and wikilinks always stay **English lowercase-hyphen**, independent of prose language.\n"
+    )
+
+
+def _private_zones_block(zones: list[str]) -> str:
+    """The MANDATORY ## Private zones + ## Strict workflow rules sections for CLAUDE.md.
+    A private zone is a path the agent must NEVER read directly — sensitive data (PHI,
+    personal info, confidential records) reachable only through a designated pipeline.
+    Returns "" when no private zone is configured."""
+    zones = [z.strip().rstrip("/") for z in (zones or []) if z.strip()]
+    if not zones:
+        return ""
+    bullets = "\n".join(f"- `{z}/`" for z in zones)
+    return f"""
+## Private zones
+
+Paths containing sensitive data (PHI, personal information, confidential records, etc.).
+**NEVER read files here directly** — always use the designated pipeline.
+
+{bullets}
+
+## Strict workflow rules — MANDATORY, no exceptions
+
+These rules override default agent behavior. Violating them corrupts data integrity.
+
+### Private zones — NEVER read directly
+
+See `## Private zones` for the current list of protected paths.
+
+**FORBIDDEN:** Any direct file read (`Read`, `Bash(cat ...)`, etc.) on private zone paths.
+
+**Why:** Direct reading bypasses data protection measures.
+"""
+
+
 def scaffold(root: str, title: str, domains: list[str], lang: str,
-             primary_lang: str = "English", private_zones: list = None,
-             search_tool: str = "none") -> None:
+             primary_lang: str = "English", private_zones: list[str] = None) -> None:
     """Create the full wiki directory tree and initial files."""
     today = date.today()
     today_iso = today.isoformat()
@@ -60,64 +132,31 @@ def scaffold(root: str, title: str, domains: list[str], lang: str,
     for gk in ["audit/.gitkeep", "audit/resolved/.gitkeep"]:
         _write(root, gk, "")
 
-    # ── Determine language config ─────────────────────────────────────────────
-    primary_lang_display = primary_lang.capitalize() if primary_lang else "English"
-    lang_display = "None" if lang.lower() in ("none", "no", "en", "english", "") else lang.capitalize()
-    # ── CLAUDE.md (single config + schema file) ───────────────────────────────
-    domains_bullets = "\n".join(f"- {d.strip()}" for d in domains)
-    if lang_display != "None":
-        lang_note = f"{primary_lang_display} + {lang_display} (bilingual)"
-    else:
-        lang_note = primary_lang_display
-
-    # ── Private zones (optional) ──────────────────────────────────────────────
-    private_zones = [z.strip().strip("/") for z in (private_zones or []) if z.strip()]
+    # ── Private zones (agent NEVER reads these directly) ──────────────────────
+    private_zones = [z.strip().rstrip("/") for z in (private_zones or []) if z.strip()]
     for z in private_zones:
         os.makedirs(os.path.join(root, z), exist_ok=True)
         _write(root, f"{z}/.gitkeep", "")
     if private_zones:
-        print(f"✓ Created private zone(s): {', '.join(private_zones)}")
-        pz_bullets = "\n".join(f"- `{z}/`" for z in private_zones)
-        private_zones_section = f"""## Private zones — MANDATORY, no exceptions
+        print(f"✓ Created private zone(s): {', '.join(private_zones)} (agent must never read directly)")
 
-These paths hold sensitive material (clinical/PHI, personal, or confidential data).
-
-**FORBIDDEN:** any direct read (`Read`, `Bash(cat ...)`, etc.) on these paths.
-**REQUIRED:** to use a protected file, route it through a redaction / de-identification
-step that writes a safe artifact into `raw/`, then ingest *that* — never the original.
-These paths are excluded from ingest and never cited in `wiki/`.
-
-{pz_bullets}
-
-> For a hard guarantee (not just agent convention), also add a `Read(...)` deny rule
-> for these paths to `.claude/settings.json` (the `update-config` skill can do this).
-
-"""
+    # ── Determine language config ─────────────────────────────────────────────
+    # Bilingual order is a per-vault decision captured here from the interview answers:
+    # the PRIMARY language leads (titles/headings), the SECONDARY is annotated in parens.
+    # English is a legitimate secondary — only an explicit "no"/"none"/empty means monolingual.
+    primary_display = _lang_display(primary_lang) or "English"
+    secondary_raw = (lang or "").strip()
+    is_bilingual = secondary_raw.lower() not in ("", "none", "no", "n")
+    secondary_display = _lang_display(secondary_raw) if is_bilingual else "None"
+    if is_bilingual:
+        lang_note = f"{primary_display} (primary) + {secondary_display} (secondary)"
+        bilingual_block = _bilingual_block(primary_display, secondary_display)
     else:
-        private_zones_section = ""
-
-    # ── Search config (qmd is opt-in, off by default) ─────────────────────────
-    search_tool = (search_tool or "none").strip().lower()
-    if search_tool == "qmd":
-        import re as _re
-        qmd_collection = _re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "wiki"
-        search_section = f"""## Search
-
-- search_tool: qmd
-- qmd_collection: {qmd_collection}
-
-> Semantic search via qmd is ON. One-time setup:
-> `qmd collection add wiki/ --name {qmd_collection}`, then `qmd embed` after each ingest.
-> See `references/tooling-tips.md`. Set `search_tool: none` to turn it off.
-
-"""
-    else:
-        search_section = """## Search
-
-- search_tool: none      # set to `qmd` to enable semantic search (see references/tooling-tips.md)
-- qmd_collection:        # collection name you pass to `qmd collection add wiki/ --name <name>`
-
-"""
+        lang_note = primary_display
+        bilingual_block = ""
+    private_block = _private_zones_block(private_zones)
+    # ── CLAUDE.md (single config + schema file) ───────────────────────────────
+    domains_bullets = "\n".join(f"- {d.strip()}" for d in domains)
 
     claude_md = f"""# {title} Knowledge Base
 
@@ -131,7 +170,7 @@ What this wiki covers:
 
 What this wiki deliberately excludes:
 - <define out-of-scope areas>
-
+{private_block}
 ## Operations
 
 This wiki follows the llm-wiki skill's eight operations:
@@ -149,7 +188,7 @@ Every operation appends an entry to `log/YYYYMMDD.md`.
 
 ### Wikilinks
 - Always `[[category/english-lowercase-slug]]`.
-
+{bilingual_block}
 ### Diagrams and formulas
 - All diagrams are **mermaid**. No ASCII art.
 - All formulas are **KaTeX** (inline `$...$` or block `$$...$$`).
@@ -185,7 +224,7 @@ Sources to ingest:
 ## Audit backlog
 *(none — run `python3 .claude/skills/llm-wiki/scripts/audit_review.py {root} --open` to refresh)*
 
-{private_zones_section}{search_section}## Notes for the LLM
+## Notes for the LLM
 - Language: {lang_note}
 - Tone: neutral
 - Depth: survey-level
@@ -286,7 +325,6 @@ graph-excluded: true
     print("✓ Created wiki/templates/ (6 templates, incl. comparison-template)")
 
     # ── log/<today>.md ────────────────────────────────────────────────────────
-    pz_log = f"\n- Private zones: {', '.join(private_zones)}" if private_zones else ""
     log_md = f"""# {today_iso}
 
 ## [{now_hm}] scaffold | Initialized {title} knowledge base
@@ -295,7 +333,8 @@ graph-excluded: true
 - Created wiki/index.md category skeleton
 - Created 6 page templates (incl. comparison-template)
 - Domains: {', '.join(d.strip() for d in domains)}
-- Language: {lang_note}{pz_log}
+- Language: {lang_note}
+- Private zones: {', '.join(private_zones) if private_zones else 'none'}
 """
     _write(root, f"log/{today_compact}.md", log_md)
     print(f"✓ Created log/{today_compact}.md")
@@ -305,18 +344,12 @@ graph-excluded: true
     script_prefix = ".claude/skills/llm-wiki/scripts"
 
     # ── Final summary ─────────────────────────────────────────────────────────
-    pz_note = ""
-    if private_zones:
-        pz_note = (f"\n🔒 Private zone(s): {', '.join(private_zones)} — declared MANDATORY in CLAUDE.md "
-                   f"(agent never reads them directly).\n"
-                   f"   For hard enforcement, add a Read(...) deny for these to .claude/settings.json "
-                   f"(the update-config skill can do it).\n")
     print(f"""
 ✅ Wiki scaffolded at: {root}/
 
 The llm-wiki skill is bundled into this vault at .claude/skills/llm-wiki/, so the
 vault is self-contained and portable — the commands below resolve locally.
-{pz_note}
+
 Next steps:
   1. Review and customize CLAUDE.md — define scope and naming conventions
   2. Add sources to raw/ (Obsidian Web Clipper for web; put PDFs in raw/pdfs/)
@@ -409,7 +442,7 @@ processed: true
     # Concept template
     _write(root, "wiki/templates/concept-template.md", f"""---
 type: concept
-title: ""
+title: ""                    # primary-language name (per CLAUDE.md § language)
 date: {today_iso}
 updated: {today_iso}
 tags: [wiki, wiki/concept]
@@ -417,10 +450,14 @@ source_count: 0
 confidence: low
 domain_volatility: medium
 last_reviewed: {today_iso}
-aliases: []
+aliases: []                  # ALL names — every language (+ synonyms)
 ---
 
-# {{Primary Name}}（{{Secondary Language Name}}）
+<!-- DEMO TEMPLATE. The H1 is the page's display name. Bilingual vault: lead with the
+     primary language and annotate the secondary in （）; the order is set by
+     CLAUDE.md § Bilingual format — NOT hardcoded here. Monolingual vault: just the name.
+     The slug/filename always stays English. -->
+# {{Primary Name}}（{{Secondary Name}}）
 
 ## Definition
 
@@ -447,14 +484,18 @@ aliases: []
     # Entity template
     _write(root, "wiki/templates/entity-template.md", f"""---
 type: entity
-title: ""
+title: ""                    # primary-language name (per CLAUDE.md § language)
 date: {today_iso}
 tags: [wiki, wiki/entity]
-entity_type: person
-aliases: []
+entity_type: person          # person | tool | paper | organization | company
+aliases: []                  # ALL names — every language (+ ticker/synonyms)
 ---
 
-# {{Name}}
+<!-- DEMO TEMPLATE. The H1 is the display name. Bilingual vault: lead with the primary
+     language and annotate the secondary in （）; order per CLAUDE.md § Bilingual format
+     — NOT hardcoded here. Monolingual vault, or no native secondary name (e.g. a ticker):
+     just the name. The slug/filename always stays English. -->
+# {{Primary Name}}（{{Secondary Name}}）
 
 ## Description
 
@@ -591,11 +632,8 @@ def main() -> None:
     parser.add_argument("--lang", type=str, default=None,
                         help='Secondary language for bilingual annotations: "zh", "ja", "none", etc.')
     parser.add_argument("--private-zones", type=str, default=None,
-                        help='Comma-separated private-zone folder name(s) the agent must NEVER read '
-                             'directly, e.g. "private" or "private,raw/journal". Blank/omit for none.')
-    parser.add_argument("--search", type=str, default="none", choices=["none", "qmd"],
-                        help='Search backend recorded in CLAUDE.md § Search. "none" (default, index '
-                             'scanning) or "qmd" (semantic; needs qmd installed + a collection).')
+                        help='Comma-separated private-zone folders the agent NEVER reads directly '
+                             '(sensitive data; pipeline-only access). Pass "" for none. Example: "private_zone"')
     args = parser.parse_args()
 
     # ── Interactive fallback ──────────────────────────────────────────────────
@@ -619,7 +657,8 @@ def main() -> None:
 
     primary_lang = args.primary_lang
     if primary_lang is None:
-        print("\nWhat is the primary language for wiki content?")
+        print("\nWhat is the PRIMARY language for wiki content?")
+        print("It leads in titles, headings, and a term's first mention (the secondary is annotated in parens).")
         print("Examples: English · Chinese · Japanese · French  (default: English)")
         primary_lang = input("> ").strip()
         if not primary_lang:
@@ -627,33 +666,24 @@ def main() -> None:
 
     lang = args.lang
     if lang is None:
-        print("\nWould you like a secondary language for bilingual term annotations?")
+        print("\nWould you like a SECONDARY language? (annotated in parens after the primary — makes the vault bilingual)")
         print("Options: no · zh (Chinese) · ja (Japanese) · en (English) · other")
         lang = input("> ").strip()
         if not lang or lang.lower() in ("no", "n", "none"):
             lang = "None"
 
-    # Private zones — ask only in an interactive terminal; never block a piped/agent run.
     private_zones_str = args.private_zones
     if private_zones_str is None:
-        if sys.stdin.isatty():
-            print("\nDo you need a private zone?")
-            print("A private zone is a folder the agent NEVER reads directly — for sensitive material")
-            print("(clinical/PHI, personal journals, confidential records). It is kept out of ingest and")
-            print("never enters the wiki; to use a file you redact it into raw/ first. Recommended for")
-            print("anything you would not want summarized into wiki pages.")
-            print('Enter folder name(s), comma-separated (e.g. "private" or "private,raw/journal"),')
-            print("or leave blank for none.")
-            try:
-                private_zones_str = input("> ").strip()
-            except EOFError:        # piped / no real stdin → treat as "none"
-                private_zones_str = ""
-        else:
+        print("\nDo you need a PRIVATE ZONE? (a folder the agent NEVER reads directly — for PHI,")
+        print("personal data, or confidential records, reachable only via a designated pipeline)")
+        print('Enter folder name(s), comma-separated, or "no" for none. Example: private_zone')
+        private_zones_str = input("> ").strip()
+        if private_zones_str.lower() in ("no", "n", "none"):
             private_zones_str = ""
     private_zones = [z.strip() for z in (private_zones_str or "").split(",") if z.strip()]
 
     scaffold(args.wiki_root, title, domains, lang, primary_lang=primary_lang,
-             private_zones=private_zones, search_tool=args.search)
+             private_zones=private_zones)
 
 
 if __name__ == "__main__":

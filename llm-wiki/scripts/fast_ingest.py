@@ -15,8 +15,6 @@ Example:
 The raw-file-path can be absolute or relative to <wiki-root>.
 """
 
-from __future__ import annotations  # PEP 604 `X | None` in signatures → lazy, works on py3.9
-
 import hashlib
 import os
 import re

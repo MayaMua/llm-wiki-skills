@@ -18,8 +18,6 @@ Exit codes:
   0 — done (always, regardless of audit count)
 """
 
-from __future__ import annotations  # PEP 604 `X | None` in signatures → lazy, works on py3.9
-
 import json
 import os
 import re

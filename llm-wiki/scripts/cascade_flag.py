@@ -15,8 +15,6 @@ Example:
     python3 cascade_flag.py ~/wikis/ai-research
 """
 
-from __future__ import annotations  # PEP 604 `X | None` in signatures → lazy, works on py3.9
-
 import hashlib
 import re
 import sys

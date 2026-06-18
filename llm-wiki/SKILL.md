@@ -96,6 +96,7 @@ then execute the scaffold script as directed there.
 │   ├── clippings/         ← Obsidian Web Clipper output
 │   ├── personal/          ← Personal writing
 │   └── refs/              ← Pointer files for large binaries
+├── <private-zone>/        ← Optional (scaffold --private-zones). Sensitive data; agent NEVER reads directly
 ├── .claude/               ← Claude Code project config (hidden from Obsidian's graph)
 │   ├── skills/            ← Skills Claude Code discovers natively
 │   │   ├── llm-wiki/      ←   This skill — bundled into the vault at scaffold time
@@ -123,6 +124,7 @@ then execute the scaffold script as directed there.
 | Layer                        | Owner  | Rule                                                                          |
 |------------------------------|--------|-------------------------------------------------------------------------------|
 | `raw/`                       | Human  | IMMUTABLE. LLM reads only, never modifies.                                    |
+| `<private-zone>/` (if any)   | Human  | NEVER read directly (`Read`/`cat`/etc.). Sensitive data; pipeline-only access. See `CLAUDE.md` § Private zones. |
 | `wiki/`                      | LLM    | LLM fully owns. Human browses, does not edit.                                 |
 | `outputs/`                   | LLM    | All answers persist here. Never lost in chat.                                 |
 | `log/`                       | LLM    | Append-only operation log.                                                    |
@@ -204,15 +206,26 @@ Bootstrap a new wiki. Run:
 
 ```bash
 python3 .claude/skills/llm-wiki/scripts/scaffold.py <wiki-root> "<Topic Title>" \
-  --domains "AI,Finance" --lang zh --private-zones ""
+  --domains "AI,Finance" --primary-lang zh --lang en --private-zones ""
 ```
 
-The setup interview asks three things — domains, second language, and **whether you
-need a private zone** (a folder the agent never reads directly; see
-`references/scaffold-wizard.md`). Pass `--private-zones "<folder[,folder]>"` to create
-one at init — it makes the folders and writes a MANDATORY "Private zones" rule into
-`CLAUDE.md`; pass `""` for none. Always pass the flag in non-interactive/agent runs so
-the script doesn't stop to prompt.
+The setup interview (see `references/scaffold-wizard.md`) asks five things: **domains**;
+the **primary language** (it leads in titles/headings); an optional **secondary
+language** (annotated in parens — this makes the vault bilingual; pass `--lang no` for
+monolingual); whether to enable **semantic search**; and whether you need a **private
+zone**. The primary/secondary answers are recorded in `CLAUDE.md` — the `## Notes →
+Language` line *and* a generated `### Bilingual format` block under Naming conventions
+that states which language leads and shows a worked example. **The skill itself stays
+language-agnostic and reads the order from `CLAUDE.md`; nothing about Chinese-vs-English
+is hardcoded in the skill or templates.**
+
+`--private-zones "<folder[,folder]>"` creates each folder under the wiki root and writes
+a MANDATORY `## Private zones` + `## Strict workflow rules` block into `CLAUDE.md`. A
+private zone is a path the agent must **NEVER read directly** (`Read`, `Bash(cat …)`,
+etc.) — it holds sensitive data (PHI, personal info, confidential records) reachable only
+through a designated pipeline. The folder lives outside `wiki/`, so it is never indexed,
+linted, or queried. Pass `""` for none. In non-interactive/agent runs always pass
+`--primary-lang`, `--lang`, and `--private-zones` so the script doesn't stop to prompt.
 
 Creates the full directory tree, `CLAUDE.md` (the single config + schema file),
 `wiki/index.md`, all templates, and the first log entry. It also **bundles the llm-wiki skill into
@@ -263,17 +276,25 @@ If the stub already exists, the script will warn — delete it first to re-inges
   lint check 13 will verify each string exists in the raw file at every lint run.
 
 **Step 3 — Concept alignment (mandatory before creating any concept page):**
-- Map each concept to an English lowercase-hyphen slug
+- Map each concept to an English lowercase-hyphen slug (map a Chinese-only name to its
+  English slug, e.g. `第一性原理` → `first-principles-thinking`)
 - Search `wiki/concepts/` for that slug
-- Also scan existing concept pages' `aliases` fields
-- If match found: UPDATE existing page, do not create new
-- If no match: CREATE new page using `wiki/templates/concept-template.md`
+- Scan existing concept pages' `aliases` fields for a match in **either language**
+  (Chinese↔Chinese, English↔English, Chinese↔English) — the idea may already live under
+  a different-language alias or synonym
+- If match found (slug OR any alias): UPDATE existing page, do not create a near-duplicate
+- If no match: CREATE new page using `wiki/templates/concept-template.md`, filling
+  `aliases` with **both the Chinese and English names** (+ synonyms)
 
 **Step 4 — For each concept (create or update):**
+- Set `title:` to the **primary-language name** (whichever language `CLAUDE.md`
+  § Bilingual format names as primary); the `# H1` / first line leads with the primary
+  language and annotates the secondary in `（）` (Chinese-primary vault: `中文名（English Name）`)
 - Add source to Sources section
-- Append to Evolution Log: `YYYY-MM-DD (N sources): Created/Reinforced/Corrected`
-- Update `source_count`, `last_reviewed`, `updated`
-- Apply secondary language annotation to new terms (if configured)
+- Append to Evolution Log: `YYYY-MM-DD (N sources): 强化/修正/新增分歧 — <one-liner>`
+- Update `source_count`, `last_reviewed`, `updated`; keep `aliases` complete & bilingual
+- Apply bilingual term annotation on a term's first appearance — `primary（secondary）`,
+  e.g. `中文（English）` in a Chinese-primary vault — per article-guide
 - Apply line citations to every factual claim
 
 **Step 5 — For each entity:** same logic as concepts.
@@ -511,6 +532,12 @@ Log: `## [HH:MM] compile | <what you did>`
 **Rule 1 — Line-Level Source Annotation**
 Every factual claim ends with: `(raw/articles/filename.md, L14-22)`
 If line not identifiable: `(raw/filename.md, location unknown)` — flag in lint.
+The citation points to the **raw file path**, NEVER to a `[[sources/...]]` page
+wikilink — a compiled source page is not verifiable evidence. The source-page
+wikilink belongs only in the page's `## Sources` section, listed **once**.
+- WRONG: `... bond issuance. ([[sources/nvda-bonds]], L10)`
+- RIGHT: `... bond issuance. (raw/clippings/nvda-bonds.md, L10)`
+lint checks 9 and 14 enforce this.
 
 **Rule 2 — Verbatim Numbers and Quotes**
 Never paraphrase numeric data.
@@ -548,10 +575,13 @@ Personal writing does NOT count toward `source_count`.
 
 ---
 
-## Secondary language annotation
+## Bilingual naming & secondary language
 
-When a secondary language is set in `CLAUDE.md` (§ Notes for the LLM), follow the rules in
-`references/article-guide.md` § Secondary Language Annotation.
+When `CLAUDE.md` (§ Notes for the LLM) sets a language order, the **first-named language
+is primary and leads; the second is annotated in parentheses**. For a `Chinese (primary)
++ English` vault, titles/headings read `中文名（English Name）` (e.g. `经济（Economy）`), the
+`title:` frontmatter is the Chinese name, `aliases` holds both languages, and slugs/wikilinks
+stay English. Full rules in `references/article-guide.md` § Bilingual Naming & Term Annotation.
 
 ---
 
@@ -596,7 +626,8 @@ knowledge — clearly distinguishing between the two.
 
 **Format:**
 - [ ] All frontmatter fields present
-- [ ] Wikilinks: `[[category/english-lowercase-slug]]`
+- [ ] Bilingual: `title:` is the primary-language name; `# H1`/first line leads with the primary language, secondary in `（）` (order per CLAUDE.md § Bilingual format); `aliases` has all languages
+- [ ] Wikilinks: `[[category/english-lowercase-slug]]` (English slug, never Chinese)
 - [ ] System files: `graph-excluded: true`
 - [ ] Source pages: `raw_sha256` computed
 
@@ -613,6 +644,6 @@ knowledge — clearly distinguishing between the two.
 - `references/log-guide.md` — log/ folder convention, allowed operations
 - `references/audit-guide.md` — audit file format, anchor strategy, inline FIX comments, processing workflow
 - `references/tooling-tips.md` — qmd setup, Obsidian config, web viewer
-- `references/scaffold-wizard.md` — first-time setup interview (Questions 1–3 + scaffold command)
+- `references/scaffold-wizard.md` — first-time setup interview (Questions 1–4: domains, primary language, secondary language, semantic search + scaffold command)
 - `references/ops/op-reflect.md` — full reflect procedure (Stage 0–3)
 - `.claude/skills/<name>/SKILL.md` — auto-discovered by Claude Code; cross-skill preferences live in each skill's `description`
