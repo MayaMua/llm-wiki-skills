@@ -54,8 +54,10 @@ def _bilingual_block(primary_display: str, secondary_display: str) -> str:
     example = _bilingual_example(primary_display, secondary_display)
     return (
         f"\n### Bilingual format ({primary_display} primary)\n"
-        f"- Titles, headings, and a term's first appearance **lead with {primary_display}** and "
-        f"annotate {secondary_display} in parens — e.g. `{example}`.\n"
+        f"- Body prose and section headings (`## …`) are written in {primary_display} **only** — "
+        f"section headings are plain {primary_display} labels, never annotated with {secondary_display}.\n"
+        f"- The bilingual pair `{example}` ({primary_display} leads, {secondary_display} in parens) "
+        f"appears **only** on the page title (`# H1`) and a technical term's first appearance.\n"
         f"- `title:` frontmatter = the {primary_display} primary name (the graph-node label); "
         f"`aliases` holds **all** names, in both {primary_display} and {secondary_display}.\n"
         f"- Slugs and wikilinks always stay **English lowercase-hyphen**, independent of prose language.\n"

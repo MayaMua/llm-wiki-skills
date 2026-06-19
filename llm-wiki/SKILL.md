@@ -293,8 +293,10 @@ If the stub already exists, the script will warn — delete it first to re-inges
 - Add source to Sources section
 - Append to Evolution Log: `YYYY-MM-DD (N sources): 强化/修正/新增分歧 — <one-liner>`
 - Update `source_count`, `last_reviewed`, `updated`; keep `aliases` complete & bilingual
-- Apply bilingual term annotation on a term's first appearance — `primary（secondary）`,
-  e.g. `中文（English）` in a Chinese-primary vault — per article-guide
+- Write **all prose and all section headings** in the primary language only — Chinese in a
+  Chinese-primary vault (`## 描述`, `## 要点`), never bilingual headings like `## 描述（Description）`
+- Apply the bilingual pair `primary（secondary）` (e.g. `中文（English）`) ONLY to the page title
+  and a technical term's first appearance — not to section headings or ordinary prose — per article-guide
 - Apply line citations to every factual claim
 
 **Step 5 — For each entity:** same logic as concepts.
@@ -579,9 +581,11 @@ Personal writing does NOT count toward `source_count`.
 
 When `CLAUDE.md` (§ Notes for the LLM) sets a language order, the **first-named language
 is primary and leads; the second is annotated in parentheses**. For a `Chinese (primary)
-+ English` vault, titles/headings read `中文名（English Name）` (e.g. `经济（Economy）`), the
-`title:` frontmatter is the Chinese name, `aliases` holds both languages, and slugs/wikilinks
-stay English. Full rules in `references/article-guide.md` § Bilingual Naming & Term Annotation.
++ English` vault, all prose and section headings are primary-language only (`## 描述`, `## 要点`,
+never `## 描述（Description）`); the bilingual pair `中文名（English Name）` (e.g. `经济（Economy）`)
+appears **only** on the page title and a technical term's first appearance. The `title:` frontmatter
+is the Chinese name, `aliases` holds both languages, and slugs/wikilinks stay English. Full rules in
+`references/article-guide.md` § Bilingual Naming & Term Annotation.
 
 ---
 
@@ -626,7 +630,7 @@ knowledge — clearly distinguishing between the two.
 
 **Format:**
 - [ ] All frontmatter fields present
-- [ ] Bilingual: `title:` is the primary-language name; `# H1`/first line leads with the primary language, secondary in `（）` (order per CLAUDE.md § Bilingual format); `aliases` has all languages
+- [ ] Bilingual: prose + section headings are primary-language only (no `（English）` on headings); only `title:`/`# H1` and each technical term's first mention use `primary（secondary）` (order per CLAUDE.md § Bilingual format); `aliases` has all languages
 - [ ] Wikilinks: `[[category/english-lowercase-slug]]` (English slug, never Chinese)
 - [ ] System files: `graph-excluded: true`
 - [ ] Source pages: `raw_sha256` computed

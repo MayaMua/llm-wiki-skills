@@ -142,8 +142,14 @@ Format: `- YYYY-MM-DD (N sources): <category> — <one-line description>`
 **the first-named language is primary and leads; the second is annotated in
 parentheses.** For a `Chinese (primary) + English (secondary)` vault:
 
-- **Titles, headings, and a term's first appearance:** `中文名（English Name）` —
-  Chinese leads.
+- **Body prose** (description, definition, analysis, notes): the **primary language only**
+  (Chinese here). Primary-first is not just term labels — the prose itself is primary-language.
+- **Section headings (`## …`):** the **primary language only**, never annotated — they are
+  generic structural labels, not terms to translate.
+  - RIGHT: `## 描述` · `## 定义` · `## 要点` · `## 来源`
+  - WRONG: `## 描述（Description）` · `## Description`
+- **Page title + a technical term's first appearance:** `中文名（English Name）` — Chinese leads,
+  English in parens. This is the **only** place the bilingual pair appears.
   - RIGHT: `经济（Economy）` · `注意力机制（Attention Mechanism）` · `美联储沟通政策（Fed Communication Policy）`
   - WRONG: `Economy（经济）` (English-primary) · bare `Economy` · bare `经济`
 - **`title:` frontmatter (concept/entity)** = the **primary-language name** (Chinese, in
